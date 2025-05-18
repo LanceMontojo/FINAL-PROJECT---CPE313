@@ -10,7 +10,7 @@ st.title("RTDETR Fire Classifier with Extinguisher Recommendations")
 # Load model
 @st.cache_resource
 def load_model():
-    return RTDETR("/content/runs/detect/train13/weights/best.pt")
+    return RTDETR("BESTO FRIENDO.pt")
 
 model = load_model()
 
