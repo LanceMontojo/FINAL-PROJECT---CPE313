@@ -4,22 +4,19 @@ from PIL import Image
 import numpy as np
 import cv2
 import tempfile
-from pathlib import Path
-import torch
-import shutil
 
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
-# Load model with caching and CUDA support
+# Load model with caching
 @st.cache_resource
 def load_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = RTDETR("BESTO FRIENDO.pt")
-    model.model.to(device)
-    return model, device
+    return RTDETR("BESTO FRIENDO.pt")
 
-model, device = load_model()
+model = load_model()
+
+# Choose input mode
+mode = st.radio("Select input type:", ["Image", "Video"])
 
 # Extinguisher recommendations dictionary
 recommendations = {
@@ -45,22 +42,19 @@ recommendations = {
     }
 }
 
-# Choose input mode
-mode = st.radio("Select input type:", ["Image", "Video"])
-
 # === IMAGE MODE ===
 if mode == "Image":
     uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-
+    
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.3)
+            results = model(image, conf=0.3)  # higher confidence threshold
             result = results[0]
 
-            # Convert plot (BGR) to RGB to fix color tint
+            # Convert plot (BGR) to RGB to fix blue tint
             img_bgr = result.plot()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             st.image(img_rgb, channels="RGB")
@@ -86,38 +80,74 @@ elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
 
     if uploaded_video:
-        # Save uploaded video to temp file
-        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
-        tfile.close()
 
-        st.video(tfile.name)
+        cap = cv2.VideoCapture(tfile.name)
+        run_detection = st.button("Run Detection")
+        detected_class_names_all = set()
 
-        if st.button("Process Full Video"):
-            with st.spinner("Processing video — this may take a while..."):
-                # Run model on the whole video, save processed output
-                results = model.predict(source=tfile.name, conf=0.3, save=True)
+        if run_detection:
+            # Create side-by-side layout
+            col1, col2 = st.columns([2, 1])  # Wider video, narrower recommendations
+            stframe = col1.empty()
+            rec_section = col2.empty()
 
-                # Find last saved processed video file
-                last_dir = sorted(Path("runs/detect").glob("predict*"), key=lambda x: x.stat().st_mtime)[-1]
-                output_video_path = list(last_dir.glob("*.mp4"))[0]
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
-            st.success("Video processing complete!")
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = model(frame_rgb, conf=0.3)
+                result = results[0]
 
-            # Show processed video
-            st.video(str(output_video_path))
+                detected_class_names_frame = set()
 
-            # Button to download processed video
-            with open(output_video_path, "rb") as f:
-                video_bytes = f.read()
-            st.download_button(
-                label="Download Processed Video",
-                data=video_bytes,
-                file_name="processed_fire_video.mp4",
-                mime="video/mp4"
-            )
+                if result.boxes is not None and len(result.boxes) > 0:
+                    predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
+                    class_names = result.names
+                    boxes = result.boxes.xyxy.cpu().numpy()
+                    confidences = result.boxes.conf.cpu().numpy()
 
-            # OPTIONAL: Show extinguisher recommendations based on detected classes from video frames
-            # For better accuracy, you might parse the detection results here
-            # (not shown here to keep it simple)
+                    for (x1, y1, x2, y2), cls_id, conf in zip(boxes.astype(int), predicted_class_indices, confidences):
+                        label = f"{class_names[cls_id]} {conf*100:.1f}%"
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(frame, label, (x1, max(20, y1 - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
+                        detected_class_names_frame.add(class_names[cls_id])
+                        detected_class_names_all.add(class_names[cls_id])
+
+                # Update video frame
+                stframe.image(frame, channels="BGR")
+
+                # Update recommendations beside the video
+                if detected_class_names_frame:
+                    rec_text = "### 🔥 Extinguisher Recommendations\n"
+                    for class_name in detected_class_names_frame:
+                        rec = recommendations.get(class_name)
+                        rec_text += f"**{class_name}**\n"
+                        if rec:
+                            rec_text += f"- :green[✔ Safe: {rec['safe']}]\n"
+                            if rec["unsafe"]:
+                                rec_text += f"- :red[✘ Avoid: {rec['unsafe']}]\n"
+                        else:
+                            rec_text += "- ⚠️ No recommendation available\n"
+                    rec_section.markdown(rec_text)
+                else:
+                    rec_section.markdown("### 🔥 Extinguisher Recommendations\nNo fire detected yet.")
+
+            cap.release()
+
+            # Final summary
+            st.subheader("Summary of Detected Classes and Recommendations")
+            for class_name in detected_class_names_all:
+                st.markdown(f"**{class_name}**")
+                rec = recommendations.get(class_name)
+                if rec:
+                    st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                    if rec["unsafe"]:
+                        st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                else:
+                    st.warning("No extinguisher recommendation found for this class.")
