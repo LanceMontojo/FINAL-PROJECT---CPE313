@@ -76,7 +76,7 @@ if mode == "Image":
                 else:
                     st.warning("No extinguisher recommendation found for this class.")
 
-# === VIDEO MODE WITH RECOMMENDATIONS ===
+# === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
     
@@ -109,28 +109,28 @@ elif mode == "Video":
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
-                # Resize for better display
+                # Resize for display
                 display_frame = cv2.resize(result_frame, (720, 400))
                 video_frame.image(display_frame, channels="BGR")
 
-                # Extract classes in current frame
+                # Get detected class names in current frame
                 frame_detected_classes = set()
-                if results[0].boxes.cls is not None:
-                    class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
-                    class_names = results[0].names
-                    for cid in class_ids:
-                        class_name = class_names[cid]
-                        frame_detected_classes.add(class_name)
-                        all_detected_classes.add(class_name)
+                class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
+                class_names = results[0].names
 
-                # Update recommendations per frame
+                for cid in class_ids:
+                    class_name = class_names[cid]
+                    frame_detected_classes.add(class_name)
+                    all_detected_classes.add(class_name)
+
+                # Live extinguisher recommendations
                 with rec_panel.container():
                     st.subheader("Extinguisher Recommendations")
                     if frame_detected_classes:
                         for class_name in sorted(frame_detected_classes):
-                            st.markdown(f"**{class_name}**")
                             rec = recommendations.get(class_name)
                             if rec:
+                                st.markdown(f"**{class_name}**")
                                 st.markdown(f":green[✔ Safe: {rec['safe']}]")
                                 if rec["unsafe"]:
                                     st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
@@ -151,8 +151,8 @@ elif mode == "Video":
             st.subheader("All Detected Classes in Video")
             if all_detected_classes:
                 for class_name in sorted(all_detected_classes):
-                    st.markdown(f"**{class_name}**")
                     rec = recommendations.get(class_name)
+                    st.markdown(f"**{class_name}**")
                     if rec:
                         st.markdown(f":green[✔ Safe: {rec['safe']}]")
                         if rec["unsafe"]:
