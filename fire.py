@@ -4,19 +4,21 @@ from PIL import Image
 import numpy as np
 import cv2
 import tempfile
+import torch
+from pathlib import Path
 
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
-# Load model with caching
+# Load model with caching and CUDA support
 @st.cache_resource
 def load_model():
-    return RTDETR("BESTO FRIENDO.pt")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = RTDETR("BESTO FRIENDO.pt")
+    model.model.to(device)
+    return model, device
 
-model = load_model()
-
-# Choose input mode
-mode = st.radio("Select input type:", ["Image", "Video"])
+model, device = load_model()
 
 # Extinguisher recommendations dictionary
 recommendations = {
@@ -41,6 +43,9 @@ recommendations = {
         "unsafe": None
     }
 }
+
+# Choose input mode
+mode = st.radio("Select input type:", ["Image", "Video"])
 
 # === IMAGE MODE ===
 if mode == "Image":
@@ -82,14 +87,15 @@ elif mode == "Video":
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
+        tfile.close()
 
         cap = cv2.VideoCapture(tfile.name)
         run_detection = st.button("Run Detection")
         detected_class_names_all = set()
 
+        # Your existing realtime frame-by-frame detection with bounding boxes
         if run_detection:
-            # Create side-by-side layout
-            col1, col2 = st.columns([2, 1])  # Wider video, narrower recommendations
+            col1, col2 = st.columns([2, 1])
             stframe = col1.empty()
             rec_section = col2.empty()
 
@@ -119,10 +125,8 @@ elif mode == "Video":
                         detected_class_names_frame.add(class_names[cls_id])
                         detected_class_names_all.add(class_names[cls_id])
 
-                # Update video frame
                 stframe.image(frame, channels="BGR")
 
-                # Update recommendations beside the video
                 if detected_class_names_frame:
                     rec_text = "### 🔥 Extinguisher Recommendations\n"
                     for class_name in detected_class_names_frame:
@@ -140,7 +144,6 @@ elif mode == "Video":
 
             cap.release()
 
-            # Final summary
             st.subheader("Summary of Detected Classes and Recommendations")
             for class_name in detected_class_names_all:
                 st.markdown(f"**{class_name}**")
@@ -151,3 +154,33 @@ elif mode == "Video":
                         st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
                 else:
                     st.warning("No extinguisher recommendation found for this class.")
+
+        # New button for full video prediction + save + download
+        if st.button("Process and Save Full Video for Download"):
+            with st.spinner("Processing full video - please wait..."):
+                results = model.predict(
+                    source=tfile.name,
+                    conf=0.3,
+                    save=True,
+                    save_txt=False,
+                    device=device,
+                    show=False
+                )
+
+                # Find latest saved video in runs/detect/predict*
+                last_run_dir = sorted(Path("runs/detect").glob("predict*"), key=lambda x: x.stat().st_mtime)[-1]
+                saved_video_path = list(last_run_dir.glob("*.mp4"))[0]
+
+            st.success("Video processed and saved!")
+
+            st.video(str(saved_video_path))
+
+            with open(saved_video_path, "rb") as f:
+                video_bytes = f.read()
+
+            st.download_button(
+                label="Download Processed Video",
+                data=video_bytes,
+                file_name="processed_fire_video.mp4",
+                mime="video/mp4"
+            )
