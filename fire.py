@@ -88,7 +88,8 @@ elif mode == "Video":
         if run_detection:
             detected_class_names = set()
             frame_count = 0
-            skip_frames = 2  # process every 2nd frame to speed up
+            skip_frames = 4  # now process every 4th frame for faster speed
+            display_every = 2  # only update Streamlit image every 2 processed frames
 
             while cap.isOpened():
                 ret, frame = cap.read()
@@ -97,19 +98,28 @@ elif mode == "Video":
 
                 frame_count += 1
                 if frame_count % skip_frames != 0:
-                    continue  # skip this frame for faster processing
+                    continue  # skip frames to speed up
 
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = model(frame_rgb, conf=0.8)  # confidence threshold 0.8
+                # Resize frame to smaller size for faster inference
+                height, width = frame.shape[:2]
+                scale_percent = 50  # reduce to 50% size
+                new_width = int(width * scale_percent / 100)
+                new_height = int(height * scale_percent / 100)
+                frame_small = cv2.resize(frame, (new_width, new_height))
+
+                frame_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
+                results = model(frame_rgb, conf=0.8)
                 result = results[0]
-
-                frame_annotated = np.array(result.plot())  # RGB image
-                stframe.image(frame_annotated, channels="RGB")
 
                 predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
                 class_names = result.names
                 for class_id in predicted_class_indices:
                     detected_class_names.add(class_names[class_id])
+
+                # Only update display every 'display_every' processed frames to reduce UI lag
+                if (frame_count // skip_frames) % display_every == 0:
+                    frame_annotated = np.array(result.plot())  # RGB image
+                    stframe.image(frame_annotated, channels="RGB")
 
             cap.release()
 
