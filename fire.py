@@ -50,9 +50,10 @@ if uploaded_file:
         results = model(image)
         result = results[0]  # Get the first result
 
-        # Draw boxes on image
-        img = np.array(result.plot())
-        st.image(img, caption="Detected Image with Boxes", use_column_width=True)
+        # Draw boxes and convert BGR to RGB
+        img_bgr = np.array(result.plot())
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        st.image(img_rgb, caption="Detected Image with Boxes", use_column_width=True)
 
         # Get detected classes
         detected_classes = result.names
