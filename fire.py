@@ -8,17 +8,17 @@ import tempfile
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
-# Load model
+# Load model with caching
 @st.cache_resource
 def load_model():
     return RTDETR("BESTO FRIENDO.pt")
 
 model = load_model()
 
-# Choose mode
+# Choose input mode
 mode = st.radio("Select input type:", ["Image", "Video"])
 
-# Extinguisher recommendations
+# Extinguisher recommendations dictionary
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -51,11 +51,12 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.8)
+            results = model(image, conf=0.8)  # confidence threshold 0.8
             result = results[0]
 
-            # result.plot() returns RGB numpy image — just display it directly
-            img_rgb = result.plot()
+            # Convert plot (BGR) to RGB to fix blue tint
+            img_bgr = result.plot()
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             st.image(img_rgb, channels="RGB")
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
@@ -89,8 +90,8 @@ elif mode == "Video":
         if run_detection:
             detected_class_names = set()
             frame_count = 0
-            skip_frames = 4  # now process every 4th frame for faster speed
-            display_every = 2  # only update Streamlit image every 2 processed frames
+            skip_frames = 4        # process every 4th frame to speed up
+            display_every = 2      # update display every 2 processed frames
 
             while cap.isOpened():
                 ret, frame = cap.read()
@@ -101,26 +102,29 @@ elif mode == "Video":
                 if frame_count % skip_frames != 0:
                     continue  # skip frames to speed up
 
-                # Resize frame to smaller size for faster inference
+                # Resize frame to 50% for faster inference
                 height, width = frame.shape[:2]
-                scale_percent = 50  # reduce to 50% size
-                new_width = int(width * scale_percent / 100)
-                new_height = int(height * scale_percent / 100)
+                new_width = int(width * 0.5)
+                new_height = int(height * 0.5)
                 frame_small = cv2.resize(frame, (new_width, new_height))
 
+                # Convert BGR to RGB for model input
                 frame_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
+
                 results = model(frame_rgb, conf=0.8)
                 result = results[0]
 
+                # Collect detected class names
                 predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
                 class_names = result.names
                 for class_id in predicted_class_indices:
                     detected_class_names.add(class_names[class_id])
 
-                # Only update display every 'display_every' processed frames to reduce UI lag
+                # Update displayed image every 'display_every' processed frames
                 if (frame_count // skip_frames) % display_every == 0:
-                    frame_annotated = np.array(result.plot())  # RGB image
-                    stframe.image(frame_annotated, channels="RGB")
+                    frame_bgr = result.plot()  # result.plot() returns BGR image
+                    frame_rgb_annotated = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                    stframe.image(frame_rgb_annotated, channels="RGB")
 
             cap.release()
 
