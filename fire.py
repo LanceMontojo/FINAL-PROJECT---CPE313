@@ -51,7 +51,7 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.1)  # confidence threshold 0.8
+            results = model(image, conf=0.3)  # higher confidence threshold
             result = results[0]
 
             # Convert plot (BGR) to RGB to fix blue tint
@@ -89,58 +89,39 @@ elif mode == "Video":
 
         if run_detection:
             detected_class_names = set()
-            frame_count = 0
-            skip_frames = 4        # process every 4th frame to speed up
 
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
 
-                frame_count += 1
-                if frame_count % skip_frames != 0:
-                    continue  # skip frames to speed up
-
                 height, width = frame.shape[:2]
 
-                # Resize frame to 50% for faster inference
-                new_width = int(width * 0.5)
-                new_height = int(height * 0.5)
-                frame_small = cv2.resize(frame, (new_width, new_height))
+                # Use full-resolution frame (no downscaling)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                # Convert BGR to RGB for model input
-                frame_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
-
-                results = model(frame_rgb, conf=0.1)
+                # Run model with higher confidence
+                results = model(frame_rgb, conf=0.3)
                 result = results[0]
 
                 # Collect detected class names
-                predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
-                class_names = result.names
-                for class_id in predicted_class_indices:
-                    detected_class_names.add(class_names[class_id])
-
-                # Draw boxes on original frame
                 if result.boxes is not None and len(result.boxes) > 0:
-                    boxes = result.boxes.xyxy.cpu().numpy()
-                    # scale boxes from small frame back to original frame size
-                    scale_x = width / new_width
-                    scale_y = height / new_height
-                    boxes[:, [0, 2]] *= scale_x  # x1, x2
-                    boxes[:, [1, 3]] *= scale_y  # y1, y2
+                    predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
+                    class_names = result.names
+                    for class_id in predicted_class_indices:
+                        detected_class_names.add(class_names[class_id])
 
+                    # Get boxes, confidences
+                    boxes = result.boxes.xyxy.cpu().numpy()
                     confidences = result.boxes.conf.cpu().numpy()
                     classes = predicted_class_indices
 
                     for (x1, y1, x2, y2), cls_id, conf in zip(boxes.astype(int), classes, confidences):
                         label = f"{class_names[cls_id]} {conf*100:.1f}%"
-                        # Draw bounding box
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        # Put label text above box
                         cv2.putText(frame, label, (x1, max(20, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                # Show the original frame with boxes in Streamlit (BGR, no color convert)
                 stframe.image(frame, channels="BGR")
 
             cap.release()
