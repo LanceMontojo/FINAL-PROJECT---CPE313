@@ -55,7 +55,7 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.3)
+            results = model(image, conf=0.7)
             result = results[0]
             img_bgr = result.plot()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
@@ -105,7 +105,7 @@ elif mode == "Video":
                 if not ret:
                     break
 
-                results = model(frame, conf=0.3)
+                results = model(frame, conf=0.7)
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
