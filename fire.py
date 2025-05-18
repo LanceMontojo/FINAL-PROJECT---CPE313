@@ -57,7 +57,7 @@ if mode == "Image":
 
             img_bgr = np.array(result.plot())  # In BGR
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-            st.image(img_rgb, caption="Detected Image with Boxes", use_column_width=True)
+            st.image(img_rgb)
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
             detected_classes = result.names
@@ -101,8 +101,8 @@ elif mode == "Video":
 
                 frame_bgr = np.array(result.plot())
                 frame_rgb_annotated = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                stframe.image(frame_rgb_annotated, channels="RGB")
 
-                stframe.image(frame_rgb_annotated, channels="RGB", use_column_width=True)
 
                 predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
                 class_names = result.names
