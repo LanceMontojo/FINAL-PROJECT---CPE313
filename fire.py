@@ -1,82 +1,133 @@
 import streamlit as st
 from ultralytics import RTDETR
-from pathlib import Path
-import tempfile
-import cv2
+from PIL import Image
 import numpy as np
-import torch  # add torch to check CUDA availability
+import cv2
+import tempfile
+import torch
+from pathlib import Path
 
-# Load model with CUDA if available
+# Title
+st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
+
+# Load model with caching, move to CUDA if available
 @st.cache_resource
 def load_model():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = RTDETR("BESTO FRIENDO.pt")
-    model.model.to(device)  # move model to device
+    model.model.to(device)
     return model, device
 
 model, device = load_model()
 
-# Recommendations dictionary remains the same
+# Recommendations dictionary
 recommendations = {
-    "Class A": {"safe": "Water mist, foam, or dry chemicals", "unsafe": "CO2 and clean agents"},
-    "Class B": {"safe": "Foam, CO2, dry chemicals", "unsafe": "Water-based extinguishers"},
-    "Class C": {"safe": "CO2, clean agents, dry chemicals", "unsafe": "Water-based extinguishers"},
-    "Class D": {"safe": "Specialized dry powder", "unsafe": None},
-    "Class F": {"safe": "Wet chemical extinguishers", "unsafe": None}
+    "Class A": {
+        "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
+        "unsafe": "Carbon dioxide and clean agents extinguishers"
+    },
+    "Class B": {
+        "safe": "Foam, carbon dioxide, or dry chemicals",
+        "unsafe": "Water-based extinguishers"
+    },
+    "Class C": {
+        "safe": "Carbon dioxide, clean agents, or dry chemicals",
+        "unsafe": "Water-based extinguishers"
+    },
+    "Class D": {
+        "safe": "Specialized dry powder extinguishers",
+        "unsafe": None
+    },
+    "Class F": {
+        "safe": "Wet chemical extinguishers to prevent splattering and reignition",
+        "unsafe": None
+    }
 }
 
-# Video uploader
-uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+# --- VIDEO MODE WITH FULL PROCESSING AND DOWNLOAD ---
+mode = st.radio("Select input type:", ["Image", "Video"])
 
-if uploaded_video:
-    st.video(uploaded_video)
+if mode == "Video":
+    uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
 
-    temp_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
-    with open(temp_path, 'wb') as f:
-        f.write(uploaded_video.read())
+    if uploaded_video:
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        tfile.write(uploaded_video.read())
+        tfile_path = tfile.name
 
-    if st.button("Process Video"):
-        with st.spinner("Running detection..."):
-            # Pass device here - Ultralytics API doesn't explicitly require it, but model is already on CUDA.
-            results = model.predict(source=temp_path, conf=0.5, save=True)
+        if st.button("Process Video"):
+            with st.spinner("Processing video, please wait..."):
+                cap = cv2.VideoCapture(tfile_path)
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-        # Get last saved video
-        last_dir = sorted(Path("runs/detect").glob("predict*"), key=lambda x: x.stat().st_mtime)[-1]
-        output_video = list(last_dir.glob("*.mp4"))[0]
+                # Output file path
+                output_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+                out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        # Analyze frame-wise detections (optional)
-        st.session_state["frame_classes"] = []
-        cap = cv2.VideoCapture(str(output_video))
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            # If you want to run per-frame detection with CUDA:
-            # Ultralytics handles numpy inputs on CUDA automatically when model is on CUDA
-            result = model.predict(frame)[0]
-            if result.boxes is not None and len(result.boxes) > 0:
-                frame_classes = set([result.names[int(c)] for c in result.boxes.cls.cpu().numpy()])
+                detected_class_names_all = set()
+
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+
+                    # Convert BGR to RGB (Ultralytics expects RGB)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                    # Predict with model on CUDA (model already on device)
+                    results = model(frame_rgb, conf=0.3)
+                    result = results[0]
+
+                    detected_class_names_frame = set()
+
+                    if result.boxes is not None and len(result.boxes) > 0:
+                        predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
+                        class_names = result.names
+                        boxes = result.boxes.xyxy.cpu().numpy()
+                        confidences = result.boxes.conf.cpu().numpy()
+
+                        for (x1, y1, x2, y2), cls_id, conf in zip(boxes.astype(int), predicted_class_indices, confidences):
+                            label = f"{class_names[cls_id]} {conf*100:.1f}%"
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(frame, label, (x1, max(20, y1 - 10)),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                            detected_class_names_frame.add(class_names[cls_id])
+                            detected_class_names_all.add(class_names[cls_id])
+
+                    # Write annotated frame to output video
+                    out.write(frame)
+
+                cap.release()
+                out.release()
+
+            st.success("Video processing complete!")
+
+            # Show processed video
+            st.video(output_path)
+
+            # Provide download button for processed video
+            with open(output_path, "rb") as f:
+                st.download_button(
+                    label="Download Processed Video",
+                    data=f,
+                    file_name="processed_fire_detection.mp4",
+                    mime="video/mp4"
+                )
+
+            # Show extinguisher recommendations for all detected classes in the video
+            st.subheader("Summary of Detected Classes and Recommendations")
+            if detected_class_names_all:
+                for class_name in detected_class_names_all:
+                    st.markdown(f"**{class_name}**")
+                    rec = recommendations.get(class_name)
+                    if rec:
+                        st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                        if rec["unsafe"]:
+                            st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                    else:
+                        st.warning("No extinguisher recommendation found for this class.")
             else:
-                frame_classes = set()
-            st.session_state["frame_classes"].append(list(frame_classes))
-        cap.release()
-        st.session_state["video_path"] = str(output_video)
-        st.success("Video processed!")
-
-# Show processed video and real-time recommendations
-if "video_path" in st.session_state:
-    st.video(st.session_state["video_path"])
-    st.markdown("### 🔥 Real-time Extinguisher Guidance")
-
-    current_frame = st.slider("Video Progress", 0, len(st.session_state["frame_classes"]) - 1, 0)
-
-    current_classes = st.session_state["frame_classes"][current_frame]
-    for class_name in current_classes:
-        st.markdown(f"**{class_name}**")
-        rec = recommendations.get(class_name)
-        if rec:
-            st.markdown(f":green[✔ Safe: {rec['safe']}]")
-            if rec["unsafe"]:
-                st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-        else:
-            st.warning("No recommendation for this class.")
+                st.info("No fire classes detected in the video.")
