@@ -125,7 +125,7 @@ elif mode == "Video":
 
                 # Update recommendations per frame
                 with rec_panel.container():
-                    st.subheader("Current Frame Recommendations")
+                    st.subheader("Extinguisher Recommendations")
                     if frame_detected_classes:
                         for class_name in sorted(frame_detected_classes):
                             st.markdown(f"**{class_name}**")
