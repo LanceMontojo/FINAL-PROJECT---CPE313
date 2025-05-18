@@ -51,7 +51,7 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.8)  # confidence threshold 0.8
+            results = model(image, conf=0.1)  # confidence threshold 0.8
             result = results[0]
 
             # Convert plot (BGR) to RGB to fix blue tint
@@ -111,7 +111,7 @@ elif mode == "Video":
                 # Convert BGR to RGB for model input
                 frame_rgb = cv2.cvtColor(frame_small, cv2.COLOR_BGR2RGB)
 
-                results = model(frame_rgb, conf=0.8)
+                results = model(frame_rgb, conf=0.1)
                 result = results[0]
 
                 # Collect detected class names
