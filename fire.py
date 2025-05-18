@@ -54,7 +54,7 @@ if mode == "Image":
             results = model(image, conf=0.8)  # set confidence threshold to 0.8
             result = results[0]
 
-            img_rgb = np.array(result.plot())  # plot returns RGB image
+            img_rgb = result.plot()  # already numpy RGB
             st.image(img_rgb)
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
