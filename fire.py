@@ -11,7 +11,7 @@ st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations
 # Load model with caching
 @st.cache_resource
 def load_model():
-    return RTDETR("best.pt")
+    return RTDETR("BESTO FRIENDO.pt")
 
 model = load_model()
 
