@@ -51,11 +51,12 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.8)  # set confidence threshold to 0.8
+            results = model(image, conf=0.8)
             result = results[0]
 
-            img_rgb = result.plot()  # already numpy RGB
-            st.image(img_rgb)
+            # result.plot() returns RGB numpy image — just display it directly
+            img_rgb = result.plot()
+            st.image(img_rgb, channels="RGB")
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
             detected_classes = result.names
