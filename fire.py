@@ -4,7 +4,6 @@ from PIL import Image
 import numpy as np
 import cv2
 import tempfile
-import time
 
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
@@ -52,11 +51,10 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image)
+            results = model(image, conf=0.8)  # set confidence threshold to 0.8
             result = results[0]
 
-            img_bgr = np.array(result.plot())  # In BGR
-            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            img_rgb = np.array(result.plot())  # plot returns RGB image
             st.image(img_rgb)
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
@@ -89,27 +87,29 @@ elif mode == "Video":
 
         if run_detection:
             detected_class_names = set()
+            frame_count = 0
+            skip_frames = 2  # process every 2nd frame to speed up
 
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
 
+                frame_count += 1
+                if frame_count % skip_frames != 0:
+                    continue  # skip this frame for faster processing
+
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = model(frame_rgb)
+                results = model(frame_rgb, conf=0.8)  # confidence threshold 0.8
                 result = results[0]
 
-                frame_bgr = np.array(result.plot())
-                frame_rgb_annotated = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                stframe.image(frame_rgb_annotated, channels="RGB")
-
+                frame_annotated = np.array(result.plot())  # RGB image
+                stframe.image(frame_annotated, channels="RGB")
 
                 predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
                 class_names = result.names
                 for class_id in predicted_class_indices:
                     detected_class_names.add(class_names[class_id])
-
-                time.sleep(0.03)
 
             cap.release()
 
