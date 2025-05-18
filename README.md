@@ -1,3 +1,5 @@
-<h1 align="center">Fire Classification System with Suppression Guidance using Deep Learning</h1>
+<h1 align="center">🔥 Fire Classification System with Suppression Guidance using Deep Learning 🔥</h1>
 <br>
-<img align="center" alt="Fire Classification" width="500" src="https://miro.medium.com/v2/resize:fit:1100/format:webp/1*IsIsj28CnFWd1fu74Im1uQ.png">
+<p align="center">
+  <img src="https://hackster.imgix.net/uploads/attachments/1411767/ezgif-1-f6bfc1e1fb.gif?auto=format%2Ccompress&gifq=35&w=400&h=300&fit=min" width="500" alt="Fire Classification Animation"/>
+</p>
