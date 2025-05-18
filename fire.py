@@ -78,56 +78,71 @@ if mode == "Image":
 # === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-    
+
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
 
         cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
         run_detection = st.button("Run Detection")
+        detected_class_names_all = set()
 
         if run_detection:
-            detected_class_names = set()
+            # Create side-by-side layout
+            col1, col2 = st.columns([2, 1])  # Wider video, narrower recommendations
+            stframe = col1.empty()
+            rec_section = col2.empty()
 
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
 
-                height, width = frame.shape[:2]
-
-                # Use full-resolution frame (no downscaling)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                # Run model with higher confidence
                 results = model(frame_rgb, conf=0.3)
                 result = results[0]
 
-                # Collect detected class names
+                detected_class_names_frame = set()
+
                 if result.boxes is not None and len(result.boxes) > 0:
                     predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
                     class_names = result.names
-                    for class_id in predicted_class_indices:
-                        detected_class_names.add(class_names[class_id])
-
-                    # Get boxes, confidences
                     boxes = result.boxes.xyxy.cpu().numpy()
                     confidences = result.boxes.conf.cpu().numpy()
-                    classes = predicted_class_indices
 
-                    for (x1, y1, x2, y2), cls_id, conf in zip(boxes.astype(int), classes, confidences):
+                    for (x1, y1, x2, y2), cls_id, conf in zip(boxes.astype(int), predicted_class_indices, confidences):
                         label = f"{class_names[cls_id]} {conf*100:.1f}%"
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         cv2.putText(frame, label, (x1, max(20, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
+                        detected_class_names_frame.add(class_names[cls_id])
+                        detected_class_names_all.add(class_names[cls_id])
+
+                # Update video frame
                 stframe.image(frame, channels="BGR")
+
+                # Update recommendations beside the video
+                if detected_class_names_frame:
+                    rec_text = "### 🔥 Extinguisher Recommendations\n"
+                    for class_name in detected_class_names_frame:
+                        rec = recommendations.get(class_name)
+                        rec_text += f"**{class_name}**\n"
+                        if rec:
+                            rec_text += f"- :green[✔ Safe: {rec['safe']}]\n"
+                            if rec["unsafe"]:
+                                rec_text += f"- :red[✘ Avoid: {rec['unsafe']}]\n"
+                        else:
+                            rec_text += "- ⚠️ No recommendation available\n"
+                    rec_section.markdown(rec_text)
+                else:
+                    rec_section.markdown("### 🔥 Extinguisher Recommendations\nNo fire detected yet.")
 
             cap.release()
 
-            st.subheader("Extinguisher Recommendations")
-            for class_name in detected_class_names:
+            # Final summary
+            st.subheader("Summary of Detected Classes and Recommendations")
+            for class_name in detected_class_names_all:
                 st.markdown(f"**{class_name}**")
                 rec = recommendations.get(class_name)
                 if rec:
