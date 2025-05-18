@@ -7,6 +7,8 @@ import tempfile
 import torch
 import os
 
+st.set_page_config(layout="wide")
+
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
@@ -74,7 +76,7 @@ if mode == "Image":
                 else:
                     st.warning("No extinguisher recommendation found for this class.")
 
-# === VIDEO MODE (REAL-TIME PROCESSING) ===
+# === VIDEO MODE WITH RECOMMENDATIONS ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
     
@@ -92,7 +94,10 @@ elif mode == "Video":
             output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
             out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-            stframe = st.empty()
+            stframe_left, stframe_right = st.columns([2, 1])
+            placeholder = stframe_left.empty()
+
+            all_detected_classes = set()
 
             while cap.isOpened():
                 ret, frame = cap.read()
@@ -103,17 +108,41 @@ elif mode == "Video":
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
-                stframe.image(result_frame, channels="BGR", use_column_width=True)
+                # Resize for display
+                display_frame = cv2.resize(result_frame, (720, 400))
+                placeholder.image(display_frame, channels="BGR")
+
+                # Update class list
+                if results[0].boxes.cls is not None:
+                    class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
+                    class_names = results[0].names
+                    for cid in class_ids:
+                        all_detected_classes.add(class_names[cid])
 
             cap.release()
             out.release()
 
-            st.success("Processing complete!")
-
             with open(output_path, "rb") as f:
                 video_bytes = f.read()
 
-            st.video(video_bytes)
+            st.success("Processing complete!")
+
+            stframe_left.video(video_bytes)
+            with stframe_right:
+                st.subheader("Extinguisher Recommendations")
+                if all_detected_classes:
+                    for class_name in sorted(all_detected_classes):
+                        st.markdown(f"**{class_name}**")
+                        rec = recommendations.get(class_name)
+                        if rec:
+                            st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                            if rec["unsafe"]:
+                                st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                        else:
+                            st.warning("No recommendation available.")
+                else:
+                    st.info("No fire classes detected.")
+
             st.download_button(
                 label="Download Processed Video",
                 data=video_bytes,
