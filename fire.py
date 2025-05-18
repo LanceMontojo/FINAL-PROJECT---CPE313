@@ -4,18 +4,19 @@ from pathlib import Path
 import tempfile
 import cv2
 import numpy as np
-import time
-import json
-import os
+import torch  # add torch to check CUDA availability
 
-# Load model
+# Load model with CUDA if available
 @st.cache_resource
 def load_model():
-    return RTDETR("BESTO FRIENDO.pt")
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = RTDETR("BESTO FRIENDO.pt")
+    model.model.to(device)  # move model to device
+    return model, device
 
-model = load_model()
+model, device = load_model()
 
-# Recommendations
+# Recommendations dictionary remains the same
 recommendations = {
     "Class A": {"safe": "Water mist, foam, or dry chemicals", "unsafe": "CO2 and clean agents"},
     "Class B": {"safe": "Foam, CO2, dry chemicals", "unsafe": "Water-based extinguishers"},
@@ -36,29 +37,28 @@ if uploaded_video:
 
     if st.button("Process Video"):
         with st.spinner("Running detection..."):
+            # Pass device here - Ultralytics API doesn't explicitly require it, but model is already on CUDA.
             results = model.predict(source=temp_path, conf=0.5, save=True)
 
         # Get last saved video
         last_dir = sorted(Path("runs/detect").glob("predict*"), key=lambda x: x.stat().st_mtime)[-1]
         output_video = list(last_dir.glob("*.mp4"))[0]
 
-        # Analyze frame-wise detections
+        # Analyze frame-wise detections (optional)
         st.session_state["frame_classes"] = []
         cap = cv2.VideoCapture(str(output_video))
-        frame_rate = cap.get(cv2.CAP_PROP_FPS)
-
-        frame_num = 0
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            # If you want to run per-frame detection with CUDA:
+            # Ultralytics handles numpy inputs on CUDA automatically when model is on CUDA
             result = model.predict(frame)[0]
             if result.boxes is not None and len(result.boxes) > 0:
                 frame_classes = set([result.names[int(c)] for c in result.boxes.cls.cpu().numpy()])
             else:
                 frame_classes = set()
             st.session_state["frame_classes"].append(list(frame_classes))
-            frame_num += 1
         cap.release()
         st.session_state["video_path"] = str(output_video)
         st.success("Video processed!")
@@ -68,7 +68,6 @@ if "video_path" in st.session_state:
     st.video(st.session_state["video_path"])
     st.markdown("### 🔥 Real-time Extinguisher Guidance")
 
-    # Simulated progress (slider)
     current_frame = st.slider("Video Progress", 0, len(st.session_state["frame_classes"]) - 1, 0)
 
     current_classes = st.session_state["frame_classes"][current_frame]
