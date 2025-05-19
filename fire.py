@@ -47,7 +47,7 @@ recommendations = {
 }
 
 # Frame extraction function
-def extract_frames(video_path, num_frames=16, size=(224, 224)):
+def extract_frames(video_path, num_frames=8, size=(224, 224)):
     vr = VideoReader(video_path, ctx=cpu(0))
     total_frames = len(vr)
     indices = np.linspace(0, total_frames - 1, num_frames).astype(int)
@@ -66,7 +66,7 @@ if mode == "Image":
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Run Detection"):
-            results = model(image, conf=0.7)
+            results = model(image, conf=0.78)
             result = results[0]
             img_bgr = result.plot()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
