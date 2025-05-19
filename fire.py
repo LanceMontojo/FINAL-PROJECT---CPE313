@@ -6,19 +6,14 @@ import cv2
 import tempfile
 import torch
 import os
-from decord import VideoReader, cpu  # Required for frame extraction
+from decord import VideoReader, cpu
 
+# Streamlit page setup
 st.set_page_config(layout="wide")
 
-# === Video Preprocessing Function ===
-def extract_frames(video_path, num_frames=16, size=(224, 224)):
-    vr = VideoReader(video_path, ctx=cpu(0))
-    total_frames = len(vr)
-    indices = np.linspace(0, total_frames - 1, num_frames).astype(int)
-    frames = [Image.fromarray(vr[i].asnumpy()).resize(size) for i in indices]
-    return frames
+# Title
+st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
-# === Load Model ===
 @st.cache_resource
 def load_model():
     return RTDETR("BESTO FRIENDO.pt")
@@ -27,7 +22,7 @@ model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.model.to(device)
 
-# === Extinguisher Recommendations ===
+# Extinguisher recommendations
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -51,16 +46,20 @@ recommendations = {
     }
 }
 
-# === Page Title ===
-st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
+# Frame extraction function
+def extract_frames(video_path, num_frames=16, size=(224, 224)):
+    vr = VideoReader(video_path, ctx=cpu(0))
+    total_frames = len(vr)
+    indices = np.linspace(0, total_frames - 1, num_frames).astype(int)
+    frames = [Image.fromarray(vr[i].asnumpy()).resize(size) for i in indices]
+    return frames
 
-# === Input Type Selection ===
+# Main UI
 mode = st.radio("Select input type:", ["Image", "Video"])
 
 # === IMAGE MODE ===
 if mode == "Image":
     uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
@@ -90,16 +89,15 @@ if mode == "Image":
 # === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tfile.write(uploaded_video.read())
         tfile.close()
 
-        action = st.radio("Select Action", ["Run Detection", "Get Frames"])
+        col1, col2 = st.columns(2)
 
-        # === RUN DETECTION ===
-        if action == "Run Detection" and st.button("Start"):
+        # Run detection
+        if col1.button("Run Detection"):
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -108,9 +106,9 @@ elif mode == "Video":
             output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
             out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-            col1, col2 = st.columns([2, 1])
-            video_frame = col1.empty()
-            rec_panel = col2.empty()
+            colA, colB = st.columns([2, 1])
+            video_frame = colA.empty()
+            rec_panel = colB.empty()
 
             all_detected_classes = set()
 
@@ -123,9 +121,11 @@ elif mode == "Video":
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
+                # Resize for display
                 display_frame = cv2.resize(result_frame, (720, 400))
                 video_frame.image(display_frame, channels="BGR")
 
+                # Extract classes
                 frame_detected_classes = set()
                 class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
                 class_names = results[0].names
@@ -135,6 +135,7 @@ elif mode == "Video":
                     frame_detected_classes.add(class_name)
                     all_detected_classes.add(class_name)
 
+                # Recommendations
                 with rec_panel.container():
                     st.subheader("Extinguisher Recommendations")
                     if frame_detected_classes:
@@ -178,12 +179,11 @@ elif mode == "Video":
                 mime="video/mp4"
             )
 
-        # === GET FRAMES ===
-        elif action == "Get Frames" and st.button("Extract Frames"):
-            st.info("Extracting frames from video...")
-            frames = extract_frames(tfile.name)
-
-            st.subheader(f"Extracted {len(frames)} Frames")
-            for i, frame in enumerate(frames):
-                st.image(frame, caption=f"Frame {i+1}", use_column_width=True)
-            st.success("Frames extracted successfully!")
+        # Extract and show frames
+        if col2.button("Get Frames"):
+            frames = extract_frames(tfile.name, num_frames=16, size=(224, 224))
+            st.subheader("Extracted Frames")
+            frame_cols = st.columns(4)
+            for idx, frame in enumerate(frames):
+                with frame_cols[idx % 4]:
+                    st.image(frame, caption=f"Frame {idx+1}", use_column_width=True)
