@@ -8,12 +8,12 @@ import torch
 import os
 from decord import VideoReader, cpu
 
-# Streamlit page setup
 st.set_page_config(layout="wide")
 
 # Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
+# Load model
 @st.cache_resource
 def load_model():
     return RTDETR("BESTO FRIENDO.pt")
@@ -22,7 +22,7 @@ model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.model.to(device)
 
-# Extinguisher recommendations
+# Extinguisher Recommendations
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -54,12 +54,13 @@ def extract_frames(video_path, num_frames=16, size=(224, 224)):
     frames = [Image.fromarray(vr[i].asnumpy()).resize(size) for i in indices]
     return frames
 
-# Main UI
+# Mode selection
 mode = st.radio("Select input type:", ["Image", "Video"])
 
 # === IMAGE MODE ===
 if mode == "Image":
     uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
@@ -89,6 +90,7 @@ if mode == "Image":
 # === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+    
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tfile.write(uploaded_video.read())
@@ -96,7 +98,7 @@ elif mode == "Video":
 
         col1, col2 = st.columns(2)
 
-        # Run detection
+        # === Run Full Video Detection ===
         if col1.button("Run Detection"):
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -106,10 +108,8 @@ elif mode == "Video":
             output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
             out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-            colA, colB = st.columns([2, 1])
-            video_frame = colA.empty()
-            rec_panel = colB.empty()
-
+            video_frame = st.empty()
+            rec_panel = st.empty()
             all_detected_classes = set()
 
             while cap.isOpened():
@@ -121,11 +121,9 @@ elif mode == "Video":
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
-                # Resize for display
                 display_frame = cv2.resize(result_frame, (720, 400))
                 video_frame.image(display_frame, channels="BGR")
 
-                # Extract classes
                 frame_detected_classes = set()
                 class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
                 class_names = results[0].names
@@ -135,7 +133,6 @@ elif mode == "Video":
                     frame_detected_classes.add(class_name)
                     all_detected_classes.add(class_name)
 
-                # Recommendations
                 with rec_panel.container():
                     st.subheader("Extinguisher Recommendations")
                     if frame_detected_classes:
@@ -179,11 +176,38 @@ elif mode == "Video":
                 mime="video/mp4"
             )
 
-        # Extract and show frames
+        # === Get Frames with Detection ===
         if col2.button("Get Frames"):
             frames = extract_frames(tfile.name, num_frames=16, size=(224, 224))
-            st.subheader("Extracted Frames")
+            st.subheader("Detected Frames with Extinguisher Recommendations")
             frame_cols = st.columns(4)
+
             for idx, frame in enumerate(frames):
                 with frame_cols[idx % 4]:
-                    st.image(frame, caption=f"Frame {idx+1}", use_column_width=True)
+                    # Run detection on the frame
+                    results = model(frame, conf=0.7)
+                    result = results[0]
+                    detected_frame = result.plot()
+                    frame_array = cv2.cvtColor(detected_frame, cv2.COLOR_BGR2RGB)
+
+                    # Display frame
+                    st.image(frame_array, caption=f"Frame {idx + 1}", use_column_width=True)
+
+                    # Get class predictions
+                    class_ids = result.boxes.cls.cpu().numpy().astype(int) if result.boxes.cls is not None else []
+                    class_names = result.names
+                    detected_classes = {class_names[cid] for cid in class_ids}
+
+                    # Display recommendations
+                    if detected_classes:
+                        for class_name in sorted(detected_classes):
+                            st.markdown(f"**{class_name}**")
+                            rec = recommendations.get(class_name)
+                            if rec:
+                                st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                                if rec["unsafe"]:
+                                    st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                            else:
+                                st.warning("No extinguisher recommendation found for this class.")
+                    else:
+                        st.info("No fire class detected in this frame.")
