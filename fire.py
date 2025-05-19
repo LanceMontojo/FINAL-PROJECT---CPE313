@@ -22,7 +22,7 @@ model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.model.to(device)
 
-# Recommendations
+# Extinguisher recommendations
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -46,7 +46,7 @@ recommendations = {
     }
 }
 
-# Frame extraction function
+# Frame extraction
 def extract_frames(video_path, num_frames=8, size=(224, 224)):
     vr = VideoReader(video_path, ctx=cpu(0))
     total_frames = len(vr)
@@ -54,7 +54,7 @@ def extract_frames(video_path, num_frames=8, size=(224, 224)):
     frames = [Image.fromarray(vr[i].asnumpy()).resize(size) for i in indices]
     return frames
 
-# Mode selection
+# Input mode
 mode = st.radio("Select input type:", ["Image", "Video"])
 
 # === IMAGE MODE ===
@@ -107,13 +107,13 @@ elif mode == "Video":
             output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
             out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-            col1, col2 = st.columns([2, 1])
-            video_frame = col1.empty()
-            rec_panel = col2.empty()
-
             all_detected_classes = set()
 
-            while cap.isOpened():
+            st.info("Processing video... please wait.")
+            progress = st.progress(0)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            for i in range(total_frames):
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -122,32 +122,14 @@ elif mode == "Video":
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
-                display_frame = cv2.resize(result_frame, (720, 400))
-                video_frame.image(display_frame, channels="BGR")
-
-                frame_detected_classes = set()
                 class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
                 class_names = results[0].names
 
                 for cid in class_ids:
                     class_name = class_names[cid]
-                    frame_detected_classes.add(class_name)
                     all_detected_classes.add(class_name)
 
-                with rec_panel.container():
-                    st.subheader("Extinguisher Recommendations")
-                    if frame_detected_classes:
-                        for class_name in sorted(frame_detected_classes):
-                            rec = recommendations.get(class_name)
-                            if rec:
-                                st.markdown(f"**{class_name}**")
-                                st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                                if rec["unsafe"]:
-                                    st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                            else:
-                                st.warning("No recommendation available.")
-                    else:
-                        st.info("No fire class detected in this frame.")
+                progress.progress((i + 1) / total_frames)
 
             cap.release()
             out.release()
@@ -158,17 +140,19 @@ elif mode == "Video":
             st.success("Processing complete!")
             st.video(video_bytes)
 
-            st.subheader("All Detected Classes in Video")
+            st.subheader("Detected Fire Classes and Extinguisher Recommendations")
             if all_detected_classes:
                 for class_name in sorted(all_detected_classes):
-                    rec = recommendations.get(class_name)
                     st.markdown(f"**{class_name}**")
+                    rec = recommendations.get(class_name)
                     if rec:
                         st.markdown(f":green[✔ Safe: {rec['safe']}]")
                         if rec["unsafe"]:
                             st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
                     else:
                         st.warning("No recommendation available.")
+            else:
+                st.info("No fire class detected in the video.")
 
             st.download_button(
                 label="Download Processed Video",
