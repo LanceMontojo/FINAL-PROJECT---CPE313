@@ -72,7 +72,7 @@ if mode == "Image":
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             st.image(img_rgb, channels="RGB")
 
-            predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
+            predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int) if result.boxes.cls is not None else []
             detected_classes = result.names
 
             st.subheader("Extinguisher Recommendations")
@@ -99,7 +99,8 @@ elif mode == "Video":
         action = st.radio("Choose action:", ["Run Detection", "Get Frames"])
 
         if action == "Run Detection":
-            enable_download = st.checkbox("Enable downloadable processed video", value=True)
+            # Checkbox default unchecked
+            enable_download = st.checkbox("Enable downloadable processed video", value=False)
 
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -156,6 +157,7 @@ elif mode == "Video":
             else:
                 st.info("No fire class detected in the video.")
 
+            # Only show download button if enabled
             if enable_download:
                 st.download_button(
                     label="Download Processed Video",
