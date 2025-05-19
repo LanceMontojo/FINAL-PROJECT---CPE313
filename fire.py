@@ -187,9 +187,3 @@ elif mode == "Video":
             for i, frame in enumerate(frames):
                 st.image(frame, caption=f"Frame {i+1}", use_column_width=True)
             st.success("Frames extracted successfully!")
-            st.download_button(
-                label="Download Frames",
-                data=b"Frames extracted successfully!",
-                file_name="extracted_frames.txt",
-                mime="text/plain"
-            )   
