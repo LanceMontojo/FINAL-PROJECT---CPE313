@@ -10,8 +10,10 @@ from decord import VideoReader, cpu
 
 st.set_page_config(layout="wide")
 
+# Title
 st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations")
 
+# Load model
 @st.cache_resource
 def load_model():
     return RTDETR("BESTO FRIENDO.pt")
@@ -20,6 +22,7 @@ model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.model.to(device)
 
+# Extinguisher recommendations
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -43,23 +46,27 @@ recommendations = {
     }
 }
 
-def extract_frames(video_path, num_frames=16, size=(224, 224)):
+# Frame extraction
+def extract_frames(video_path, num_frames=8, size=(224, 224)):
     vr = VideoReader(video_path, ctx=cpu(0))
     total_frames = len(vr)
     indices = np.linspace(0, total_frames - 1, num_frames).astype(int)
     frames = [Image.fromarray(vr[i].asnumpy()).resize(size) for i in indices]
     return frames
 
+# Input mode
 mode = st.radio("Select input type:", ["Image", "Video"])
 
+# === IMAGE MODE ===
 if mode == "Image":
     uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-        if st.button("Start Detection"):
-            results = model(image, conf=0.7)
+        if st.button("Run Detection"):
+            results = model(image, conf=0.78)
             result = results[0]
             img_bgr = result.plot()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
@@ -80,153 +87,160 @@ if mode == "Image":
                 else:
                     st.warning("No extinguisher recommendation found for this class.")
 
+# === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-
+    
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tfile.write(uploaded_video.read())
         tfile.close()
 
-        st.subheader("Choose detection mode:")
-        option = st.radio("", ["Run Detection", "Get Frames", "Process Video and Download"])
+        action = st.radio("Choose action:", ["Idle", "Run Detection", "Get Frames"], index=0)
+        enable_download = st.checkbox("Enable Downloadable Processed Video", value=False)
 
-        if st.button("Start Detection"):
-            if option == "Run Detection":
-                cap = cv2.VideoCapture(tfile.name)
-                col1, col2 = st.columns([2,1])
-                video_frame = col1.empty()
-                rec_panel = col2.empty()
-                all_detected_classes = set()
+        if action == "Run Detection":
+            if st.button("Start Detection"):
 
-                while cap.isOpened():
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-
-                    results = model(frame, conf=0.7)
-                    result_frame = results[0].plot()
-
-                    display_frame = cv2.resize(result_frame, (720,400))
-                    video_frame.image(display_frame, channels="BGR")
-
-                    class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
-                    class_names = results[0].names
-                    frame_detected_classes = set()
-
-                    for cid in class_ids:
-                        class_name = class_names[cid]
-                        frame_detected_classes.add(class_name)
-                        all_detected_classes.add(class_name)
-
-                    with rec_panel.container():
-                        st.subheader("Extinguisher Recommendations")
-                        if frame_detected_classes:
-                            for class_name in sorted(frame_detected_classes):
-                                rec = recommendations.get(class_name)
-                                if rec:
-                                    st.markdown(f"**{class_name}**")
-                                    st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                                    if rec["unsafe"]:
-                                        st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                                else:
-                                    st.warning("No recommendation available.")
-                        else:
-                            st.info("No fire class detected in this frame.")
-
-                cap.release()
-
-                st.subheader("All Detected Classes in Video")
-                if all_detected_classes:
-                    for class_name in sorted(all_detected_classes):
-                        rec = recommendations.get(class_name)
-                        st.markdown(f"**{class_name}**")
-                        if rec:
-                            st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                            if rec["unsafe"]:
-                                st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                        else:
-                            st.warning("No recommendation available.")
-
-            elif option == "Get Frames":
-                st.info("Extracting frames from video...")
-                frames = extract_frames(tfile.name, num_frames=16)
-                st.image(frames, width=150, caption=[f"Frame {i+1}" for i in range(len(frames))])
-
-            elif option == "Process Video and Download":
                 cap = cv2.VideoCapture(tfile.name)
                 fps = cap.get(cv2.CAP_PROP_FPS)
                 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-                output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
-                out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-
-                col1, col2 = st.columns([2,1])
-                video_frame = col1.empty()
-                rec_panel = col2.empty()
                 all_detected_classes = set()
 
-                while cap.isOpened():
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
+                if enable_download:
+                    # Process entire video and save output
+                    output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
+                    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-                    results = model(frame, conf=0.7)
-                    result_frame = results[0].plot()
+                    st.info("Processing video... please wait.")
+                    progress = st.progress(0)
 
-                    out.write(result_frame)
-                    display_frame = cv2.resize(result_frame, (720, 400))
-                    video_frame.image(display_frame, channels="BGR")
+                    for i in range(total_frames):
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
 
-                    class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
-                    class_names = results[0].names
-                    frame_detected_classes = set()
+                        results = model(frame, conf=0.78)
+                        result_frame = results[0].plot()
+                        out.write(result_frame)
 
-                    for cid in class_ids:
-                        class_name = class_names[cid]
-                        frame_detected_classes.add(class_name)
-                        all_detected_classes.add(class_name)
+                        class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
+                        class_names = results[0].names
 
-                    with rec_panel.container():
-                        st.subheader("Extinguisher Recommendations")
-                        if frame_detected_classes:
-                            for class_name in sorted(frame_detected_classes):
-                                rec = recommendations.get(class_name)
-                                if rec:
+                        for cid in class_ids:
+                            class_name = class_names[cid]
+                            all_detected_classes.add(class_name)
+
+                        progress.progress((i + 1) / total_frames)
+
+                    cap.release()
+                    out.release()
+
+                    with open(output_path, "rb") as f:
+                        video_bytes = f.read()
+
+                    st.success("Processing complete!")
+                    st.video(video_bytes)
+
+                    st.subheader("Detected Fire Classes and Extinguisher Recommendations")
+                    if all_detected_classes:
+                        for class_name in sorted(all_detected_classes):
+                            st.markdown(f"**{class_name}**")
+                            rec = recommendations.get(class_name)
+                            if rec:
+                                st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                                if rec["unsafe"]:
+                                    st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                            else:
+                                st.warning("No recommendation available.")
+                    else:
+                        st.info("No fire class detected in the video.")
+
+                    st.download_button(
+                        label="Download Processed Video",
+                        data=video_bytes,
+                        file_name="processed_fire_detection.mp4",
+                        mime="video/mp4"
+                    )
+
+                else:
+                    # Preview detection on sampled frames, no video saving
+                    st.info("Preview detection on sampled frames (no video saving)")
+
+                    preview_frames = min(50, total_frames)
+                    frame_step = max(total_frames // preview_frames, 1)
+
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+                    for i in range(preview_frames):
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_step)
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+
+                        frame_resized = cv2.resize(frame, (224, 224))
+                        results = model(frame_resized, conf=0.78)
+                        result_frame = results[0].plot()
+
+                        class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
+                        class_names = results[0].names
+                        detected_classes = {class_names[cid] for cid in class_ids}
+                        all_detected_classes.update(detected_classes)
+
+                        col1, col2 = st.columns([3, 2])
+
+                        with col1:
+                            img_rgb = cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB)
+                            st.image(img_rgb, caption=f"Frame {i * frame_step + 1}", use_column_width=True)
+
+                        with col2:
+                            if detected_classes:
+                                st.markdown("### Recommendations")
+                                for class_name in sorted(detected_classes):
                                     st.markdown(f"**{class_name}**")
-                                    st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                                    if rec["unsafe"]:
-                                        st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                                else:
-                                    st.warning("No recommendation available.")
-                        else:
-                            st.info("No fire class detected in this frame.")
+                                    rec = recommendations.get(class_name)
+                                    if rec:
+                                        st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                                        if rec["unsafe"]:
+                                            st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                                    else:
+                                        st.warning("No recommendation available.")
+                            else:
+                                st.info("No fire class detected in this frame.")
 
-                cap.release()
-                out.release()
+                    cap.release()
 
-                with open(output_path, "rb") as f:
-                    video_bytes = f.read()
+        elif action == "Get Frames":
+            num_frames = st.slider("Select number of frames to extract", min_value=4, max_value=64, value=16, step=4)
+            frames = extract_frames(tfile.name, num_frames=num_frames, size=(224, 224))
+            st.subheader("Detected Frames with Extinguisher Recommendations")
+            frame_cols = st.columns(4)
 
-                st.success("Processing complete!")
-                st.video(video_bytes)
+            for idx, frame in enumerate(frames):
+                with frame_cols[idx % 4]:
+                    results = model(frame, conf=0.7)
+                    result = results[0]
+                    detected_frame = result.plot()
+                    frame_array = cv2.cvtColor(detected_frame, cv2.COLOR_BGR2RGB)
 
-                st.subheader("All Detected Classes in Video")
-                if all_detected_classes:
-                    for class_name in sorted(all_detected_classes):
-                        rec = recommendations.get(class_name)
-                        st.markdown(f"**{class_name}**")
-                        if rec:
-                            st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                            if rec["unsafe"]:
-                                st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                        else:
-                            st.warning("No recommendation available.")
+                    st.image(frame_array, caption=f"Frame {idx + 1}", use_column_width=True)
 
-                st.download_button(
-                    label="Download Processed Video",
-                    data=video_bytes,
-                    file_name="processed_fire_detection.mp4",
-                    mime="video/mp4"
-                )
+                    class_ids = result.boxes.cls.cpu().numpy().astype(int) if result.boxes.cls is not None else []
+                    class_names = result.names
+                    detected_classes = {class_names[cid] for cid in class_ids}
+
+                    if detected_classes:
+                        for class_name in sorted(detected_classes):
+                            st.markdown(f"**{class_name}**")
+                            rec = recommendations.get(class_name)
+                            if rec:
+                                st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                                if rec["unsafe"]:
+                                    st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                            else:
+                                st.warning("No extinguisher recommendation found for this class.")
+                    else:
+                        st.info("No fire class detected in this frame.")
