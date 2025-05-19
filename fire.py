@@ -99,6 +99,8 @@ elif mode == "Video":
         action = st.radio("Choose action:", ["Run Detection", "Get Frames"])
 
         if action == "Run Detection":
+            enable_download = st.checkbox("Enable downloadable processed video", value=True)
+
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -154,12 +156,13 @@ elif mode == "Video":
             else:
                 st.info("No fire class detected in the video.")
 
-            st.download_button(
-                label="Download Processed Video",
-                data=video_bytes,
-                file_name="processed_fire_detection.mp4",
-                mime="video/mp4"
-            )
+            if enable_download:
+                st.download_button(
+                    label="Download Processed Video",
+                    data=video_bytes,
+                    file_name="processed_fire_detection.mp4",
+                    mime="video/mp4"
+                )
 
         elif action == "Get Frames":
             num_frames = st.slider("Select number of frames to extract", min_value=4, max_value=64, value=16, step=4)
