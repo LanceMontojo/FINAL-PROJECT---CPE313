@@ -60,7 +60,7 @@ mode = st.radio("Select input type:", ["Image", "Video"])
 # === IMAGE MODE ===
 if mode == "Image":
     uploaded_image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-    
+
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
         st.image(image, caption="Uploaded Image", use_column_width=True)
@@ -90,14 +90,14 @@ if mode == "Image":
 # === VIDEO MODE ===
 elif mode == "Video":
     uploaded_video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-    
+
     if uploaded_video:
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tfile.write(uploaded_video.read())
         tfile.close()
 
-        action = st.radio("Choose action:", ["Idle", "Run Detection", "Get Frames"], index=0)
-        enable_download = st.checkbox("Enable Downloadable Processed Video", value=False)
+        action = st.radio("Choose action:", ["Run Detection", "Get Frames"])
+        enable_download = st.checkbox("Enable downloadable processed video", value=False)
 
         if action == "Run Detection":
             if st.button("Start Detection"):
@@ -111,11 +111,11 @@ elif mode == "Video":
                 all_detected_classes = set()
 
                 if enable_download:
-                    # Process entire video and save output
+                    # Process full video, save and provide download
                     output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
                     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-                    st.info("Processing video... please wait.")
+                    st.info("Processing full video for downloadable output, please wait...")
                     progress = st.progress(0)
 
                     for i in range(total_frames):
@@ -129,10 +129,8 @@ elif mode == "Video":
 
                         class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
                         class_names = results[0].names
-
                         for cid in class_ids:
-                            class_name = class_names[cid]
-                            all_detected_classes.add(class_name)
+                            all_detected_classes.add(class_names[cid])
 
                         progress.progress((i + 1) / total_frames)
 
@@ -167,51 +165,50 @@ elif mode == "Video":
                     )
 
                 else:
-                    # Preview detection on sampled frames, no video saving
+                    # Just preview detection on sampled frames, no video saving
                     st.info("Preview detection on sampled frames (no video saving)")
 
                     preview_frames = min(50, total_frames)
                     frame_step = max(total_frames // preview_frames, 1)
 
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    preview_container = st.empty()
+                    progress = st.progress(0)
 
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     for i in range(preview_frames):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_step)
                         ret, frame = cap.read()
                         if not ret:
                             break
 
-                        frame_resized = cv2.resize(frame, (224, 224))
-                        results = model(frame_resized, conf=0.78)
+                        results = model(frame, conf=0.78)
                         result_frame = results[0].plot()
 
                         class_ids = results[0].boxes.cls.cpu().numpy().astype(int) if results[0].boxes.cls is not None else []
                         class_names = results[0].names
-                        detected_classes = {class_names[cid] for cid in class_ids}
-                        all_detected_classes.update(detected_classes)
+                        for cid in class_ids:
+                            all_detected_classes.add(class_names[cid])
 
-                        col1, col2 = st.columns([3, 2])
+                        img_rgb = cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB)
+                        preview_container.image(img_rgb, caption=f"Frame {i * frame_step}", use_column_width=True)
 
-                        with col1:
-                            img_rgb = cv2.cvtColor(result_frame, cv2.COLOR_BGR2RGB)
-                            st.image(img_rgb, caption=f"Frame {i * frame_step + 1}", use_column_width=True)
-
-                        with col2:
-                            if detected_classes:
-                                st.markdown("### Recommendations")
-                                for class_name in sorted(detected_classes):
-                                    st.markdown(f"**{class_name}**")
-                                    rec = recommendations.get(class_name)
-                                    if rec:
-                                        st.markdown(f":green[✔ Safe: {rec['safe']}]")
-                                        if rec["unsafe"]:
-                                            st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
-                                    else:
-                                        st.warning("No recommendation available.")
-                            else:
-                                st.info("No fire class detected in this frame.")
+                        progress.progress((i + 1) / preview_frames)
 
                     cap.release()
+
+                    st.subheader("Detected Fire Classes and Extinguisher Recommendations (Preview)")
+                    if all_detected_classes:
+                        for class_name in sorted(all_detected_classes):
+                            st.markdown(f"**{class_name}**")
+                            rec = recommendations.get(class_name)
+                            if rec:
+                                st.markdown(f":green[✔ Safe: {rec['safe']}]")
+                                if rec["unsafe"]:
+                                    st.markdown(f":red[✘ Avoid: {rec['unsafe']}]")
+                            else:
+                                st.warning("No recommendation available.")
+                    else:
+                        st.info("No fire class detected in the video.")
 
         elif action == "Get Frames":
             num_frames = st.slider("Select number of frames to extract", min_value=4, max_value=64, value=16, step=4)
