@@ -22,7 +22,7 @@ model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.model.to(device)
 
-# Extinguisher Recommendations
+# Recommendations
 recommendations = {
     "Class A": {
         "safe": "Water mist, foam, or multipurpose dry chemicals extinguishers",
@@ -96,10 +96,9 @@ elif mode == "Video":
         tfile.write(uploaded_video.read())
         tfile.close()
 
-        col1, col2 = st.columns(2)
+        action = st.radio("Choose action:", ["Run Detection", "Get Frames"])
 
-        # === Run Full Video Detection ===
-        if col1.button("Run Detection"):
+        if action == "Run Detection":
             cap = cv2.VideoCapture(tfile.name)
             fps = cap.get(cv2.CAP_PROP_FPS)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -108,8 +107,10 @@ elif mode == "Video":
             output_path = os.path.join(tempfile.gettempdir(), "processed_video.mp4")
             out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-            video_frame = st.empty()
-            rec_panel = st.empty()
+            col1, col2 = st.columns([2, 1])
+            video_frame = col1.empty()
+            rec_panel = col2.empty()
+
             all_detected_classes = set()
 
             while cap.isOpened():
@@ -117,7 +118,7 @@ elif mode == "Video":
                 if not ret:
                     break
 
-                results = model(frame, conf=0.7)
+                results = model(frame, conf=0.78)
                 result_frame = results[0].plot()
                 out.write(result_frame)
 
@@ -176,29 +177,25 @@ elif mode == "Video":
                 mime="video/mp4"
             )
 
-        # === Get Frames with Detection ===
-        if col2.button("Get Frames"):
-            frames = extract_frames(tfile.name, num_frames=16, size=(224, 224))
+        elif action == "Get Frames":
+            num_frames = st.slider("Select number of frames to extract", min_value=4, max_value=64, value=16, step=4)
+            frames = extract_frames(tfile.name, num_frames=num_frames, size=(224, 224))
             st.subheader("Detected Frames with Extinguisher Recommendations")
             frame_cols = st.columns(4)
 
             for idx, frame in enumerate(frames):
                 with frame_cols[idx % 4]:
-                    # Run detection on the frame
                     results = model(frame, conf=0.7)
                     result = results[0]
                     detected_frame = result.plot()
                     frame_array = cv2.cvtColor(detected_frame, cv2.COLOR_BGR2RGB)
 
-                    # Display frame
                     st.image(frame_array, caption=f"Frame {idx + 1}", use_column_width=True)
 
-                    # Get class predictions
                     class_ids = result.boxes.cls.cpu().numpy().astype(int) if result.boxes.cls is not None else []
                     class_names = result.names
                     detected_classes = {class_names[cid] for cid in class_ids}
 
-                    # Display recommendations
                     if detected_classes:
                         for class_name in sorted(detected_classes):
                             st.markdown(f"**{class_name}**")
