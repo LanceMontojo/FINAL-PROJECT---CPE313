@@ -16,7 +16,7 @@ st.title("RTDETR Fire Classifier (Image/Video) with Extinguisher Recommendations
 # Load model
 @st.cache_resource
 def load_model():
-    return RTDETR("BESTO FRIENDO.pt")
+    return RTDETR("90maprtdetr.pt")
 
 model = load_model()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
