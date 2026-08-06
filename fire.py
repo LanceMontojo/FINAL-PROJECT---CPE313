@@ -63,14 +63,14 @@ if mode == "Image":
     
     if uploaded_image:
         image = Image.open(uploaded_image).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.image(image, caption="Uploaded Image", width="stretch")
 
         if st.button("Run Detection"):
             results = model(image, conf=0.7)
             result = results[0]
             img_bgr = result.plot()
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-            st.image(img_rgb, channels="RGB")
+            st.image(img_rgb, channels="RGB", width="stretch")
 
             predicted_class_indices = result.boxes.cls.cpu().numpy().astype(int)
             detected_classes = result.names
@@ -190,7 +190,7 @@ elif mode == "Video":
                     detected_frame = result.plot()
                     frame_array = cv2.cvtColor(detected_frame, cv2.COLOR_BGR2RGB)
 
-                    st.image(frame_array, caption=f"Frame {idx + 1}", use_column_width=True)
+                    st.image(frame_array, caption=f"Frame {idx + 1}", width="stretch")
 
                     class_ids = result.boxes.cls.cpu().numpy().astype(int) if result.boxes.cls is not None else []
                     class_names = result.names
