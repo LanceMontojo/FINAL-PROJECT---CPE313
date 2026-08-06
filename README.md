@@ -11,7 +11,7 @@ The dataset used in this study was derived from a previously published work that
 
 During preprocessing, the images were automatically oriented and resized. Data augmentation techniques such as flipping, rotation, cropping, and shearing were applied. However, augmentations involving color changes, including grayscale conversion, hue adjustment, and saturation modification, were deliberately avoided. This decision was made because color plays an essential role in accurately classifying different types of fire.
 
-To simplify the task, the researcher focused exclusively on Class B and Class F fires.
+To simplify the classification task and align the research scope, this study focuses exclusively on two fire categories: Class B (flammable liquids) and Class F (cooking oils and fats). Images belonging to other fire classes were intentionally excluded from the dataset and evaluation.
 
 ## Models
 
@@ -36,3 +36,33 @@ Link for the Streamlit App: https://final-project---cpe313-dtkebcnukh5khdv97cmrb
 - Narrowed down the dataset to focus on specific fire classes to simplify the classification process.
 
 - Composed the abstract, introduction, and methodology sections of the research paper.
+
+## Setup
+
+The easiest way to try the project is through the deployed Streamlit application: https://final-project---cpe313-dtkebcnukh5khdv97cmrbc.streamlit.app/
+ 
+1. Open the application.
+2. Choose an input type (Image or Video).
+3. Upload an image or video containing a Class B or Class F fire.
+4. Click Run Detection.
+5. The application will:
+    - Detect the fire type using the trained RT-DETR model.
+    - Display the detection results with bounding boxes.
+    - Identify whether the fire is Class B or Class F.
+    - Recommend the appropriate extinguisher and indicate extinguishers that should be avoided.
+
+### Example Output
+
+After clicking **Run Detection**, the application displays the detected fire class with bounding boxes and provides the corresponding fire extinguisher recommendation.
+
+Below are examples of the expected results:
+
+Class B:
+<p align = "center"> 
+  <img width="1111" height="767" alt="image" src="https://github.com/user-attachments/assets/e6c2e92e-8457-47a5-9e6c-941e13be4d29" />
+</p>
+
+Class F:
+<p align = "center"> 
+  <img width="1190" height="862" alt="image" src="https://github.com/user-attachments/assets/0952d32a-526a-4f01-98c1-a8f842f6a908" />
+</p>
