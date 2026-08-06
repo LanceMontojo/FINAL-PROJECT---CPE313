@@ -31,9 +31,9 @@ To evaluate the model's performance in a practical setting, the best-performing 
 Link for the Streamlit App: https://final-project---cpe313-dtkebcnukh5khdv97cmrbc.streamlit.app/
 
 ## Contribution
-- Located and compiled the dataset, then performed annotation on the original images for use in the research.
+- Designed and implemented the end-to-end data engineering pipeline, including dataset collection, integration, preprocessing, augmentation, and annotation for model training.
 
-- Narrowed down the dataset to focus on specific fire classes to simplify the classification process.
+- Developed, trained, evaluated, and deployed the deep learning models and the Streamlit application for real-time fire detection and extinguisher recommendation.
 
 - Composed the abstract, introduction, and methodology sections of the research paper.
 
